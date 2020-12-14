@@ -26,7 +26,7 @@ class Twiss(MatrixMethod):
     :type energy: float, optional
     """
 
-    def __init__(self, lattice, start_idx=0, **kwargs):
+    def __init__(self, lattice, start_idx=0, initial_twiss=None, **kwargs):
         super().__init__(lattice, **kwargs)
 
         self._start_idx = start_idx
@@ -49,7 +49,10 @@ class Twiss(MatrixMethod):
         self.twiss_array_changed.connect(self._on_twiss_array_changed)
         self._twiss_array_needs_update = True
         self._twiss_array = np.empty(0)
-        self._initial_twiss = np.empty(8)
+        if initial_twiss is None:
+            self._initial_twiss = np.empty(8)
+        else:
+            self._initial_twiss = initial_twiss
 
         self.psi_changed = Signal(self.twiss_array_changed)
         """Gets emitted when the betatron phase changes."""
@@ -207,45 +210,47 @@ class Twiss(MatrixMethod):
 
     def update_twiss_array(self):
         """Manually update the twiss_array."""
-        if not self.stable:
-            raise UnstableLatticeError(self)
-
         n_points = self.n_steps + 1
         if self._twiss_array.shape[0] != n_points:
             self._twiss_array = np.empty((8, n_points))
 
-        m = self.one_turn_matrix
-        beta_x0 = np.abs(2 * m[0, 1]) / np.sqrt(self.term_x)
-        alpha_x0 = (m[0, 0] - m[1, 1]) / (2 * m[0, 1]) * beta_x0
-        gamma_x0 = (1 + alpha_x0 ** 2) / beta_x0
-        beta_y0 = np.abs(2 * m[2, 3]) / np.sqrt(self.term_y)
-        alpha_y0 = (m[2, 2] - m[3, 3]) / (2 * m[2, 3]) * beta_y0
-        gamma_y0 = (1 + alpha_y0 ** 2) / beta_y0
+        if self._initial_twiss is None:
+            if not self.stable:
+                raise UnstableLatticeError(self)
 
-        # TODO: Wille seems to be wrong, investigate!
-        # eta_x_dds0 = (m[1, 0] * m[0, 5] + m[1, 5] * (1 - m[0, 0])) / (2 - m[0, 0] - m[1, 1])
-        # eta_x0 = (m[0, 1] * eta_x_dds0 + m[0, 5]) / (1 - m[1, 1])
+            m = self.one_turn_matrix
+            beta_x0 = np.abs(2 * m[0, 1]) / np.sqrt(self.term_x)
+            alpha_x0 = (m[0, 0] - m[1, 1]) / (2 * m[0, 1]) * beta_x0
+            gamma_x0 = (1 + alpha_x0 ** 2) / beta_x0
+            beta_y0 = np.abs(2 * m[2, 3]) / np.sqrt(self.term_y)
+            alpha_y0 = (m[2, 2] - m[3, 3]) / (2 * m[2, 3]) * beta_y0
+            gamma_y0 = (1 + alpha_y0 ** 2) / beta_y0
+            eta_x0, eta_x_dds0 = (
+                (m[0, 5] * (1 - m[1, 1]) + m[0, 1] * m[1, 5]) / (2 - m[0, 0] - m[1, 1]),
+                (m[1, 5] * (1 - m[0, 0]) + m[1, 0] * m[0, 5]) / (2 - m[0, 0] - m[1, 1]),
+            )
 
-        eta_x0, eta_x_dds0 = (
-            (m[0, 5] * (1 - m[1, 1]) + m[0, 1] * m[1, 5]) / (2 - m[0, 0] - m[1, 1]),
-            (m[1, 5] * (1 - m[0, 0]) + m[1, 0] * m[0, 5]) / (2 - m[0, 0] - m[1, 1]),
-        )
+            # TODO: Wille seems to be wrong, investigate!
+            # eta_x_dds0 = (m[1, 0] * m[0, 5] + m[1, 5] * (1 - m[0, 0])) / (2 - m[0, 0] - m[1, 1])
+            # eta_x0 = (m[0, 1] * eta_x_dds0 + m[0, 5]) / (1 - m[1, 1])
 
-        self._initial_twiss[:] = (
-            beta_x0,
-            beta_y0,
-            alpha_x0,
-            alpha_y0,
-            gamma_x0,
-            gamma_y0,
-            eta_x0,
-            eta_x_dds0,
-        )
+            initial_twiss = np.array(
+                [
+                    beta_x0,
+                    beta_y0,
+                    alpha_x0,
+                    alpha_y0,
+                    gamma_x0,
+                    gamma_y0,
+                    eta_x0,
+                    eta_x_dds0,
+                ]
+            )
+        else:
+            initial_twiss = self._initial_twiss
+
         twiss_product(
-            self.accumulated_array,
-            self._initial_twiss,
-            self._twiss_array,
-            self.start_idx,
+            self.accumulated_array, initial_twiss, self._twiss_array, self.start_idx
         )
 
         self._twiss_array_needs_update = False
