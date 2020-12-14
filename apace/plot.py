@@ -95,13 +95,19 @@ def draw_elements(
 
         y0_local = y0
         if isinstance(element, Dipole) and element.angle < 0:
-            y0_local += rect_height / 4
+            y0_local -= rect_height / 2
+        elif isinstance(element, Quadrupole) and element.k1 < 0:
+            y0_local -= rect_height / 2
+        elif isinstance(element, Sextupole) and element.k2 < 0:
+            y0_local -= rect_height / 2
+        elif isinstance(element, Octupole) and element.k3 < 0:
+            y0_local -= rect_height / 2
 
         ax.add_patch(
             plt.Rectangle(
-                (max(start, x_min), y0_local - rect_height / 2),
+                (max(start, x_min), y0_local),
                 min(end, x_max) - max(start, x_min),
-                rect_height,
+                rect_height / 2,
                 facecolor=color,
                 clip_on=False,
                 zorder=10,
